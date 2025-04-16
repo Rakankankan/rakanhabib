@@ -1,0 +1,12 @@
+streamlit
+requests
+pandas
+scikit-learn
+opencv-python
+torch
+torchvision
+Pillow
+numpy
+streamlit-autorefresh
+ultralytics
+google-generativeai
