@@ -13,6 +13,8 @@ from PIL import Image
 import numpy as np
 import io
 import os
+from telegram.ext import Application
+from telegram import Bot
 
 # Atur cache PyTorch untuk lingkungan deployment
 os.environ['TORCH_HOME'] = '/tmp/torch_hub'
@@ -80,34 +82,21 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- TELEGRAM FUNCTIONS ---
-def send_telegram_message(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": message,
-        "parse_mode": "Markdown"
-    }
+async def send_telegram_message(message):
     try:
-        response = requests.post(url, json=payload)
-        if response.status_code != 200:
-            st.error(f"Gagal mengirim pesan ke Telegram: {response.text}")
+        bot = Bot(token=TELEGRAM_BOT_TOKEN)
+        await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message, parse_mode="Markdown")
+        st.success("Pesan berhasil dikirim ke Telegram!")
     except Exception as e:
-        st.error(f"Error saat mengirim ke Telegram: {str(e)}")
+        st.error(f"Gagal mengirim pesan ke Telegram: {str(e)}")
 
-def send_telegram_photo(photo, caption):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
-    files = {'photo': ('snapshot.jpg', photo, 'image/jpeg')}
-    payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "caption": caption,
-        "parse_mode": "Markdown"
-    }
+async def send_telegram_photo(photo, caption):
     try:
-        response = requests.post(url, files=files, data=payload)
-        if response.status_code != 200:
-            st.error(f"Gagal mengirim foto ke Telegram: {response.text}")
+        bot = Bot(token=TELEGRAM_BOT_TOKEN)
+        await bot.send_photo(chat_id=TELEGRAM_CHAT_ID, photo=photo, caption=caption, parse_mode="Markdown")
+        st.success("Foto berhasil dikirim ke Telegram!")
     except Exception as e:
-        st.error(f"Error saat mengirim foto ke Telegram: {str(e)}")
+        st.error(f"Gagal mengirim foto ke Telegram: {str(e)}")
 
 # --- DATA FETCH ---
 def get_ubidots_data(variable_label):
@@ -425,14 +414,14 @@ def generative_chatbot_response(question, mq2_value, lux_value, temperature_valu
 def load_yolo_model():
     try:
         st.write("Mencoba memuat model YOLOv5...")
+        st.write(f"Current working directory: {os.getcwd()}")
+        st.write(f"Model file exists: {os.path.exists('model/best.pt')}")
         model = torch.hub.load('ultralytics/yolov5', 'custom', path='model/best.pt', force_reload=True)
         st.write("Model YOLOv5 berhasil dimuat.")
         return model
     except Exception as e:
         st.error(f"Gagal memuat model YOLOv5: {str(e)}")
         return None
-
-model_cam = load_yolo_model()
 
 def run_camera_detection(frame_placeholder, status_placeholder):
     try:
@@ -451,8 +440,8 @@ def run_camera_detection(frame_placeholder, status_placeholder):
                 break
 
             img_pil = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-            if model_cam is not None:
-                results = model_cam(img_pil)
+            if st.session_state.get("model_cam") is not None:
+                results = st.session_state.model_cam(img_pil)
                 results.render()
                 rendered = results.ims[0]
                 frame = cv2.cvtColor(rendered, cv2.COLOR_RGB2BGR)
@@ -476,7 +465,8 @@ def run_camera_detection(frame_placeholder, status_placeholder):
                         f"🚨 *Peringatan*: Aktivitas merokok terdeteksi di ruangan!\n"
                         f"🕒 *Waktu*: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
                     )
-                    send_telegram_photo(st.session_state.latest_frame, caption)
+                    import asyncio
+                    asyncio.run(send_telegram_photo(st.session_state.latest_frame, caption))
                     last_smoking_notification = current_time
 
                     mq2_status = st.session_state.last_notification['mq2']['status'] or "Tidak ada data"
@@ -492,7 +482,7 @@ def run_camera_detection(frame_placeholder, status_placeholder):
                         mq2_status, mq2_value, lux_status, lux_value,
                         temp_status, temp_value, humidity_status, humidity_value
                     )
-                    send_telegram_photo(st.session_state.latest_frame, narrative)
+                    asyncio.run(send_telegram_photo(st.session_state.latest_frame, narrative))
 
                 if current_time - last_saved_time > save_interval:
                     filename = datetime.datetime.now().strftime("smoking_%Y%m%d_%H%M%S.jpg")
@@ -513,7 +503,7 @@ def run_camera_detection(frame_placeholder, status_placeholder):
     except Exception as e:
         status_placeholder.error(f"Error kamera: {str(e)}")
     finally:
-        cv2.destroyAllWindows()
+        pass  # Tidak perlu cv2.destroyAllWindows()
 
 # --- PERIODIC NOTIFICATION FUNCTION ---
 def send_periodic_notification():
@@ -533,10 +523,11 @@ def send_periodic_notification():
             temp_status, temp_value, humidity_status, humidity_value
         )
 
+        import asyncio
         if st.session_state.latest_frame is not None:
-            send_telegram_photo(st.session_state.latest_frame, caption)
+            asyncio.run(send_telegram_photo(st.session_state.latest_frame, caption))
         else:
-            send_telegram_message(caption + "\n⚠️ *Foto*: Kamera tidak aktif")
+            asyncio.run(send_telegram_message(caption + "\n⚠️ *Foto*: Kamera tidak aktif"))
 
         st.session_state.last_notification['last_sent'] = current_time
 
@@ -616,10 +607,11 @@ with tab1:
                         f"📊 *Nilai MQ2*: {value}\n"
                         f"🕒 *Waktu*: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
                     )
+                    import asyncio
                     if st.session_state.latest_frame is not None:
-                        send_telegram_photo(st.session_state.latest_frame, caption)
+                        asyncio.run(send_telegram_photo(st.session_state.latest_frame, caption))
                     else:
-                        send_telegram_message(caption + "\n⚠️ *Foto*: Kamera tidak aktif")
+                        asyncio.run(send_telegram_message(caption + "\n⚠️ *Foto*: Kamera tidak aktif"))
                     st.session_state.last_notification['mq2']['last_alert_sent'] = current_time
 
                     narrative = generate_narrative_report(
@@ -632,9 +624,9 @@ with tab1:
                         st.session_state.last_notification['humidity']['value'] or "N/A"
                     )
                     if st.session_state.latest_frame is not None:
-                        send_telegram_photo(st.session_state.latest_frame, narrative)
+                        asyncio.run(send_telegram_photo(st.session_state.latest_frame, narrative))
                     else:
-                        send_telegram_message(narrative + "\n⚠️ *Foto*: Kamera tidak aktif")
+                        asyncio.run(send_telegram_message(narrative + "\n⚠️ *Foto*: Kamera tidak aktif"))
 
                 st.session_state.last_notification['mq2']['status'] = status
                 st.session_state.last_notification['mq2']['value'] = value
@@ -697,6 +689,12 @@ with tab1:
 
     send_periodic_notification()
 
+    # Tombol uji notifikasi Telegram
+    st.subheader("Uji Notifikasi Telegram")
+    if st.button("Kirim Pesan Uji ke Telegram"):
+        import asyncio
+        asyncio.run(send_telegram_message("🔍 *Pesan Uji*: Sistem deteksi merokok berfungsi dengan baik!"))
+
     if mq2_value_latest is not None:
         st.markdown("---")
         st.subheader("💬 Chatbot Pengawas")
@@ -752,7 +750,8 @@ with tab1:
         prediction = predict_smoking_risk_rule_based(mq2_value_latest, lux_value_latest)
         st.write(prediction)
         if "Tinggi" in prediction:
-            send_telegram_message(f"🚨 *Peringatan Risiko*: {prediction}")
+            import asyncio
+            asyncio.run(send_telegram_message(f"🚨 *Peringatan Risiko*: {prediction}"))
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -773,6 +772,8 @@ with tab2:
 
     if start_cam:
         st.session_state.cam_running = True
+        if 'model_cam' not in st.session_state or st.session_state.model_cam is None:
+            st.session_state.model_cam = load_yolo_model()  # Muat model saat deteksi dimulai
         if auto_refresh_cam:
             run_camera_detection(frame_placeholder, status_placeholder)
         elif st.session_state.last_frame is not None:
