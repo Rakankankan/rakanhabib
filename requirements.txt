@@ -3,6 +3,7 @@ requests
 pandas
 scikit-learn
 streamlit-autorefresh
+opencv-python
 opencv-python-headless
 torch
 torchvision
