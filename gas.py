@@ -33,6 +33,7 @@ TELEGRAM_BOT_TOKEN = "7941979379:AAEWGtlb87RYkvht8GzL8Ber29uosKo3e4s"
 TELEGRAM_CHAT_ID = "5721363432"
 NOTIFICATION_INTERVAL = 300  # 5 menit dalam detik
 ALERT_COOLDOWN = 60  # 1 menit cooldown untuk notifikasi langsung
+CAMERA_URL = "http://192.168.1.6"  # URL kamera ESP32-CAM yang diperbarui
 
 # --- STYLE ---
 st.markdown("""
@@ -447,10 +448,14 @@ def load_yolo_model():
 
 def run_camera_detection(frame_placeholder, status_placeholder):
     try:
-        cap = cv2.VideoCapture('http://192.168.1.6:81/stream')
+        logger.info(f"Mencoba membuka stream kamera di {CAMERA_URL}")
+        cap = cv2.VideoCapture(CAMERA_URL)
         if not cap.isOpened():
-            logger.error("Tidak dapat membuka stream kamera")
-            status_placeholder.error("Tidak dapat membuka stream kamera. Periksa URL atau koneksi ESP32-CAM.")
+            logger.error(f"Tidak dapat membuka stream kamera di {CAMERA_URL}")
+            status_placeholder.error(
+                f"Tidak dapat membuka stream kamera di {CAMERA_URL}. "
+                "Periksa apakah ESP32-CAM aktif, URL benar, atau port/streaming path diperlukan (misalnya, :81/stream)."
+            )
             return
         last_saved_time = 0
         last_smoking_notification = 0
