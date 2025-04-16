@@ -15,6 +15,12 @@ import io
 import os
 from telegram.ext import Application
 from telegram import Bot
+import asyncio
+import logging
+
+# Atur logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Atur cache PyTorch untuk lingkungan deployment
 os.environ['TORCH_HOME'] = '/tmp/torch_hub'
@@ -84,18 +90,24 @@ st.markdown("""
 # --- TELEGRAM FUNCTIONS ---
 async def send_telegram_message(message):
     try:
+        logger.info("Mengirim pesan ke Telegram...")
         bot = Bot(token=TELEGRAM_BOT_TOKEN)
         await bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message, parse_mode="Markdown")
+        logger.info("Pesan berhasil dikirim ke Telegram")
         st.success("Pesan berhasil dikirim ke Telegram!")
     except Exception as e:
+        logger.error(f"Gagal mengirim pesan ke Telegram: {str(e)}")
         st.error(f"Gagal mengirim pesan ke Telegram: {str(e)}")
 
 async def send_telegram_photo(photo, caption):
     try:
+        logger.info("Mengirim foto ke Telegram...")
         bot = Bot(token=TELEGRAM_BOT_TOKEN)
         await bot.send_photo(chat_id=TELEGRAM_CHAT_ID, photo=photo, caption=caption, parse_mode="Markdown")
+        logger.info("Foto berhasil dikirim ke Telegram")
         st.success("Foto berhasil dikirim ke Telegram!")
     except Exception as e:
+        logger.error(f"Gagal mengirim foto ke Telegram: {str(e)}")
         st.error(f"Gagal mengirim foto ke Telegram: {str(e)}")
 
 # --- DATA FETCH ---
@@ -110,9 +122,11 @@ def get_ubidots_data(variable_label):
         if response.status_code == 200:
             return response.json().get("results", [])
         else:
+            logger.error(f"Gagal mengambil data dari Ubidots untuk {variable_label}: {response.status_code}")
             st.error(f"Gagal mengambil data dari Ubidots untuk {variable_label}: {response.status_code}")
             return None
     except Exception as e:
+        logger.error(f"Error saat mengambil data Ubidots: {str(e)}")
         st.error(f"Error saat mengambil data Ubidots: {str(e)}")
         return None
 
@@ -413,13 +427,21 @@ def generative_chatbot_response(question, mq2_value, lux_value, temperature_valu
 @st.cache_resource
 def load_yolo_model():
     try:
+        logger.info("Mencoba memuat model YOLOv5...")
         st.write("Mencoba memuat model YOLOv5...")
         st.write(f"Current working directory: {os.getcwd()}")
         st.write(f"Model file exists: {os.path.exists('model/best.pt')}")
-        model = torch.hub.load('ultralytics/yolov5', 'custom', path='model/best.pt', force_reload=True)
-        st.write("Model YOLOv5 berhasil dimuat.")
+        if os.path.exists('model/best.pt'):
+            model = torch.hub.load('ultralytics/yolov5', 'custom', path='model/best.pt', force_reload=True)
+        else:
+            logger.warning("File model/best.pt tidak ditemukan, menggunakan model yolov5s")
+            st.warning("File model/best.pt tidak ditemukan, menggunakan model yolov5s")
+            model = torch.hub.load('ultralytics/yolov5', 'yolov5s', force_reload=True)
+        logger.info("Model YOLOv5 berhasil dimuat")
+        st.write("Model YOLOv5 berhasil dimuat")
         return model
     except Exception as e:
+        logger.error(f"Gagal memuat model YOLOv5: {str(e)}")
         st.error(f"Gagal memuat model YOLOv5: {str(e)}")
         return None
 
@@ -427,6 +449,7 @@ def run_camera_detection(frame_placeholder, status_placeholder):
     try:
         cap = cv2.VideoCapture('http://192.168.1.6:81/stream')
         if not cap.isOpened():
+            logger.error("Tidak dapat membuka stream kamera")
             status_placeholder.error("Tidak dapat membuka stream kamera. Periksa URL atau koneksi ESP32-CAM.")
             return
         last_saved_time = 0
@@ -436,6 +459,7 @@ def run_camera_detection(frame_placeholder, status_placeholder):
         while st.session_state.get("cam_running", False) and st.session_state.get("cam_refresh", False):
             ret, frame = cap.read()
             if not ret:
+                logger.error("Gagal membaca frame dari kamera")
                 status_placeholder.error("Gagal membaca frame dari kamera. Stream mungkin terputus.")
                 break
 
@@ -459,13 +483,13 @@ def run_camera_detection(frame_placeholder, status_placeholder):
             st.session_state.latest_frame = buffer.tobytes()
 
             if found_person and found_smoke:
+                logger.warning("Merokok terdeteksi di ruangan")
                 status_placeholder.warning("Merokok terdeteksi di ruangan!")
                 if current_time - last_smoking_notification > ALERT_COOLDOWN:
                     caption = (
                         f"🚨 *Peringatan*: Aktivitas merokok terdeteksi di ruangan!\n"
                         f"🕒 *Waktu*: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
                     )
-                    import asyncio
                     asyncio.run(send_telegram_photo(st.session_state.latest_frame, caption))
                     last_smoking_notification = current_time
 
@@ -488,6 +512,7 @@ def run_camera_detection(frame_placeholder, status_placeholder):
                     filename = datetime.datetime.now().strftime("smoking_%Y%m%d_%H%M%S.jpg")
                     cv2.imwrite(filename, frame)
                     last_saved_time = current_time
+                    logger.info(f"Gambar disimpan: {filename}")
                     status_placeholder.info(f"Gambar disimpan: {filename}")
             else:
                 status_placeholder.success("Tidak ada aktivitas merokok terdeteksi di ruangan.")
@@ -501,6 +526,7 @@ def run_camera_detection(frame_placeholder, status_placeholder):
 
         cap.release()
     except Exception as e:
+        logger.error(f"Error kamera: {str(e)}")
         status_placeholder.error(f"Error kamera: {str(e)}")
     finally:
         pass  # Tidak perlu cv2.destroyAllWindows()
@@ -509,6 +535,7 @@ def run_camera_detection(frame_placeholder, status_placeholder):
 def send_periodic_notification():
     current_time = time.time()
     if current_time - st.session_state.last_notification['last_sent'] > NOTIFICATION_INTERVAL:
+        logger.info("Mengirim notifikasi periodik...")
         mq2_status = st.session_state.last_notification['mq2']['status'] or "Tidak ada data"
         mq2_value = st.session_state.last_notification['mq2']['value'] or "N/A"
         lux_status = st.session_state.last_notification['lux']['status'] or "Tidak ada data"
@@ -523,13 +550,13 @@ def send_periodic_notification():
             temp_status, temp_value, humidity_status, humidity_value
         )
 
-        import asyncio
         if st.session_state.latest_frame is not None:
             asyncio.run(send_telegram_photo(st.session_state.latest_frame, caption))
         else:
             asyncio.run(send_telegram_message(caption + "\n⚠️ *Foto*: Kamera tidak aktif"))
 
         st.session_state.last_notification['last_sent'] = current_time
+        logger.info("Notifikasi periodik dikirim")
 
 # --- UI START ---
 st.markdown('<div class="main-title">Sistem Deteksi Merokok Terintegrasi</div>', unsafe_allow_html=True)
@@ -607,7 +634,6 @@ with tab1:
                         f"📊 *Nilai MQ2*: {value}\n"
                         f"🕒 *Waktu*: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
                     )
-                    import asyncio
                     if st.session_state.latest_frame is not None:
                         asyncio.run(send_telegram_photo(st.session_state.latest_frame, caption))
                     else:
@@ -692,7 +718,6 @@ with tab1:
     # Tombol uji notifikasi Telegram
     st.subheader("Uji Notifikasi Telegram")
     if st.button("Kirim Pesan Uji ke Telegram"):
-        import asyncio
         asyncio.run(send_telegram_message("🔍 *Pesan Uji*: Sistem deteksi merokok berfungsi dengan baik!"))
 
     if mq2_value_latest is not None:
@@ -750,7 +775,6 @@ with tab1:
         prediction = predict_smoking_risk_rule_based(mq2_value_latest, lux_value_latest)
         st.write(prediction)
         if "Tinggi" in prediction:
-            import asyncio
             asyncio.run(send_telegram_message(f"🚨 *Peringatan Risiko*: {prediction}"))
 
     st.markdown('</div>', unsafe_allow_html=True)
