@@ -33,7 +33,7 @@ TELEGRAM_BOT_TOKEN = "7941979379:AAEWGtlb87RYkvht8GzL8Ber29uosKo3e4s"
 TELEGRAM_CHAT_ID = "5721363432"
 NOTIFICATION_INTERVAL = 300  # 5 menit dalam detik
 ALERT_COOLDOWN = 60  # 1 menit cooldown untuk notifikasi langsung
-CAMERA_URL = "http://192.168.1.6:81/stream"  # URL kamera ESP32-CAM yang diperbarui
+CAMERA_URL = "http://192.168.131.67:81/stream"  # URL kamera ESP32-CAM yang diperbarui
 
 # --- STYLE ---
 st.markdown("""
