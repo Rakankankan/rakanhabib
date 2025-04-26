@@ -11,7 +11,7 @@ SSID = "moonstar"
 PASSWORD = "17072005"
 
 # === KONFIGURASI UBIDOTS ===
-UBIDOTS_TOKEN = "BBUS-JBKLQqTfq2CPXNytxeUfSaTjekeL1K"  # Ganti dengan token milikmu
+UBIDOTS_TOKEN = "BBUS-4dkNId6LDOVysK48pdwW8cUGBfAQTK"
 UBIDOTS_DEVICE_LABEL = "hsc345"
 UBIDOTS_URL = "http://industrial.api.ubidots.com/api/v1.6/devices/{}".format(UBIDOTS_DEVICE_LABEL)
 
@@ -23,7 +23,6 @@ headers = {
 # === KONFIGURASI PIN ===
 DHT_PIN = 13
 LDR_PIN = 34
-PIR_PIN = 12
 I2C_SDA = 21
 I2C_SCL = 22
 RED_LED_PIN = 14
@@ -89,10 +88,22 @@ def send_to_ubidots(temperature, humidity, lux, mq2_value):
     except Exception as e:
         print("Gagal kirim ke Ubidots:", e)
 
-# === KONTROL LED ===
+# === KONTROL LED SESUAI SENSOR MQ2 & SUHU ===
 def control_alerts(temperature, mq2_value):
     global smoke_alert_active
 
+    # Prioritas utama: asap berbahaya
+    if mq2_value > 800:
+        red_led.on()
+        yellow_led.off()
+        green_led.off()
+        smoke_alert_active = True
+        return
+
+    # Reset alert asap
+    smoke_alert_active = False
+
+    # Kontrol LED berdasarkan suhu
     if temperature < 29:
         green_led.on()
         yellow_led.off()
@@ -105,16 +116,6 @@ def control_alerts(temperature, mq2_value):
         green_led.off()
         yellow_led.off()
         red_led.on()
-
-    if mq2_value > 600 and not smoke_alert_active:
-        red_led.on()
-        green_led.off()
-        yellow_led.off()
-        smoke_alert_active = True
-        time.sleep(0.5)
-
-    if mq2_value <= 600:
-        smoke_alert_active = False
 
 # === TAMPILKAN DI OLED ===
 def show_main_data(humidity, temperature, lux, mq2_value):
@@ -143,5 +144,6 @@ while True:
         send_to_ubidots(temperature, humidity, lux, mq2_value)
 
     show_main_data(humidity, temperature, lux, mq2_value)
-    time.sleep(2)
+    time.sleep(1)
+
 
