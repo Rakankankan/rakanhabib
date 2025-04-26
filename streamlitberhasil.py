@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 os.environ['TORCH_HOME'] = '/tmp/torch_hub'
 
 # --- CONFIG ---
-UBIDOTS_TOKEN = "BBUS-JBKLQqTfq2CPXNytxeUfSaTjekeL1K"
+UBIDOTS_TOKEN = "BBUS-4dkNId6LDOVysK48pdwW8cUGBfAQTK"
 DEVICE_LABEL = "hsc345"
 VARIABLES = ["mq2", "humidity", "temperature", "lux"]
 TELEGRAM_BOT_TOKEN = "7941979379:AAEWGtlb87RYkvht8GzL8Ber29uosKo3e4s"
